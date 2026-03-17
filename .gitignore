@@ -1,0 +1,32 @@
+# Python Virtual Environment (The most important one!)
+venv/
+ENV/
+env/
+
+# Python Cache (Speeds up execution but not needed on GitHub)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Django specific
+db.sqlite3
+db.sqlite3-journal
+local_settings.py
+media/
+staticfiles/
+
+# AI/Audio processing temporary files
+.ipynb_checkpoints/
+*.wav
+*.mp3
+*.m4a
+
+# Environments and Secrets
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# OS specific
+.DS_Store
+Thumbs.db
