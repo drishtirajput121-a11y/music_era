@@ -5,12 +5,12 @@
     <div class="col-md-6">
         <div class="card p-5">
             <h2 class="text-center mb-4">Upload Audio</h2>
-            <p class="text-muted text-center">Select a .wav file to extract musical notes using AI.</p>
+            <p class="text-muted text-center">Select a .wav or .mp3 file to extract musical notes using AI.</p>
             
             <form method="post" enctype="multipart/form-data" class="mt-4">
                 {% csrf_token %}
                 <div class="mb-4">
-                    {{ form.as_p }}
+                    {{ form.as_p|safe }}
                 </div>
                 <div class="d-grid">
                     <button type="submit" class="btn btn-primary">Start AI Transcription</button>

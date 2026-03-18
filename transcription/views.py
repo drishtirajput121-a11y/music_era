@@ -13,13 +13,13 @@ from django.core.files.uploadedfile import UploadedFile
 
 
 def predict_pitch_10ms_from_uploaded_wav(
-    uploaded_wav: UploadedFile,
+    uploaded_audio: UploadedFile,
     *,
     sr: int = 16000,
     viterbi: bool = True,
 ) -> dict[str, Any]:
     """
-    Load an uploaded .wav with librosa and run CREPE pitch prediction every 10ms.
+    Load an uploaded .wav or .mp3 with librosa and run CREPE pitch prediction every 10ms.
 
     Returns CREPE outputs:
       - time: (N,) seconds
@@ -31,13 +31,14 @@ def predict_pitch_10ms_from_uploaded_wav(
 
     # CREPE expects mono float audio at 16 kHz.
     # Writing to a temp file is the most compatible approach for Django uploads on Windows.
-    suffix = os.path.splitext(uploaded_wav.name or "")[1].lower()
-    if suffix and suffix != ".wav":
-        raise ValueError("Expected a .wav file")
+    suffix = os.path.splitext(uploaded_audio.name or "")[1].lower()
+    if suffix not in {".wav", ".mp3"}:
+        raise ValueError("Expected a .wav or .mp3 file")
 
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+    # Preserve original extension so librosa/ffmpeg can decode non‑WAV formats.
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp_path = tmp.name
-        for chunk in uploaded_wav.chunks():
+        for chunk in uploaded_audio.chunks():
             tmp.write(chunk)
 
     try:
@@ -78,11 +79,13 @@ def upload_audio(request):
             
             # 3. Add notes and the combined list to the results dictionary
             results['notes'] = notes
-            results['results_list'] = zip(
-                results['time'], 
-                results['frequency'], 
-                results['confidence'], 
-                notes
+            results['results_list'] = list(
+                zip(
+                    results['time'],
+                    results['frequency'],
+                    results['confidence'],
+                    notes,
+                )
             )
             
             # 4. Pass the whole dictionary to the template
