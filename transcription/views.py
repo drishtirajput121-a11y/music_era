@@ -1,7 +1,7 @@
 from __future__ import annotations
 from .forms import AudioUploadForm
 from django.shortcuts import render, redirect
-
+from .utils import hz_to_note
 import os
 import tempfile
 from typing import Any
@@ -70,9 +70,25 @@ def upload_audio(request):
     if request.method == 'POST':
         form = AudioUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            # This calls the AI function the Cursor AI just wrote for you!
+            # 1. Get the raw AI results
             results = predict_pitch_10ms_from_uploaded_wav(request.FILES['audio_file'])
-            return render(request, 'transcription/results.html', {'results': results})
+            
+            # 2. Convert frequencies to musical notes using the utility we made
+            # We use results['frequency'] (the key from your dictionary)
+            notes = [hz_to_note(f) for f in results['frequency']]
+            
+            # 3. Zip everything together so the HTML table can loop through it easily
+            # Note: Your dict uses 'time' and 'frequency' (singular)
+            results_list = zip(
+                results['time'], 
+                results['frequency'], 
+                results['confidence'], 
+                notes
+            )
+            
+            return render(request, 'transcription/results.html', {
+                'results_list': results_list
+            })
     else:
         form = AudioUploadForm()
     return render(request, 'transcription/upload.html', {'form': form})
