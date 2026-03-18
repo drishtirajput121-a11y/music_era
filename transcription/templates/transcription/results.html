@@ -20,6 +20,27 @@
                         {{ results.time|length }}
                     </li>
                 </ul>
+                <h4 class="mt-4">Detected Notes 🎵</h4>
+<div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+    <table class="table table-sm table-hover border">
+        <thead class="table-dark sticky-top">
+            <tr>
+                <th>Time</th>
+                <th>Note</th>
+                <th>Hz</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for time, freq, conf, note in results.results_list %}
+            <tr>
+                <td>{{ time|floatformat:2 }}s</td>
+                <td class="text-primary fw-bold">{{ note }}</td>
+                <td class="text-muted">{{ freq|floatformat:1 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
             {% else %}
                 <div class="alert alert-warning mb-4">
                     No results were returned from the pitch predictor.

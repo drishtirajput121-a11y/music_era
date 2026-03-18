@@ -70,25 +70,23 @@ def upload_audio(request):
     if request.method == 'POST':
         form = AudioUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            # 1. Get the raw AI results
+            # 1. Run the AI prediction
             results = predict_pitch_10ms_from_uploaded_wav(request.FILES['audio_file'])
             
-            # 2. Convert frequencies to musical notes using the utility we made
-            # We use results['frequency'] (the key from your dictionary)
+            # 2. Convert frequencies to notes
             notes = [hz_to_note(f) for f in results['frequency']]
             
-            # 3. Zip everything together so the HTML table can loop through it easily
-            # Note: Your dict uses 'time' and 'frequency' (singular)
-            results_list = zip(
+            # 3. Add notes and the combined list to the results dictionary
+            results['notes'] = notes
+            results['results_list'] = zip(
                 results['time'], 
                 results['frequency'], 
                 results['confidence'], 
                 notes
             )
             
-            return render(request, 'transcription/results.html', {
-                'results_list': results_list
-            })
+            # 4. Pass the whole dictionary to the template
+            return render(request, 'transcription/results.html', {'results': results})
     else:
         form = AudioUploadForm()
     return render(request, 'transcription/upload.html', {'form': form})
