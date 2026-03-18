@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .forms import AudioUploadForm
 
 import os
 import tempfile
@@ -64,3 +65,13 @@ def predict_pitch_10ms_from_uploaded_wav(
             os.remove(tmp_path)
         except OSError:
             pass
+def upload_audio(request):
+    if request.method == 'POST':
+        form = AudioUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            # This calls the AI function the Cursor AI just wrote for you!
+            results = predict_pitch_10ms_from_uploaded_wav(request.FILES['audio_file'])
+            return render(request, 'transcription/results.html', {'results': results})
+    else:
+        form = AudioUploadForm()
+    return render(request, 'transcription/upload.html', {'form': form})
