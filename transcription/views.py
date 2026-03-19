@@ -4,6 +4,8 @@ from .forms import AudioUploadForm
 from django.shortcuts import render, redirect
 from .utils import hz_to_note, MusicEngine
 import os
+import re
+import math
 import tempfile
 from typing import Any
 from django.core.files.uploadedfile import UploadedFile
@@ -100,6 +102,9 @@ def upload_audio(request):
             engine = MusicEngine(instrument)
             lead_events = engine.transform(results["results_list"])
 
+            # ── Noise Reduction / Stabilization ──
+            lead_events = _stabilize_events(lead_events, min_duration=0.3)
+
             # 5. Save the uploaded audio file so the browser can play it back
             upload_dir = os.path.join(settings.MEDIA_ROOT, 'uploads')
             os.makedirs(upload_dir, exist_ok=True)
@@ -126,3 +131,85 @@ def upload_audio(request):
     else:
         form = AudioUploadForm()
     return render(request, 'transcription/upload.html', {'form': form})
+
+
+# ─────────────────────────────────────────────
+# Noise Reduction / Stabilization Helpers
+# ─────────────────────────────────────────────
+
+_SEMITONE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def _clean_note_name(raw: str) -> str:
+    """Strip noise symbols (~, -, backticks) from a note name."""
+    return re.sub(r"[~`\-]+", "", raw).strip()
+
+
+def _snap_frequency(hz: float) -> float:
+    """
+    Snap a raw frequency to the nearest standard equal-temperament semitone.
+    Returns the canonical frequency for that semitone.
+    """
+    if hz <= 0:
+        return 0.0
+    midi = round(69 + 12 * math.log2(hz / 440.0))
+    return 440.0 * (2 ** ((midi - 69) / 12.0))
+
+
+def _stabilize_events(
+    events: list[dict[str, Any]],
+    *,
+    min_duration: float = 0.3,
+    confidence_floor: float = 0.55,
+    dedup_window: float = 0.15,
+) -> list[dict[str, Any]]:
+    """
+    Post-process lead_events to reduce noise:
+      1. Strip noise symbols from note names.
+      2. Snap frequencies to standard semitones.
+      3. Drop events with confidence below *confidence_floor*.
+      4. Collapse rapid identical-note repetitions within *dedup_window* seconds.
+      5. Filter events shorter than *min_duration* seconds.
+      6. Merge identical consecutive chord events.
+    """
+    if not events:
+        return events
+
+    # ── Step 1 & 2: Clean notes and snap frequencies ──
+    for ev in events:
+        ev["note"] = _clean_note_name(str(ev.get("note", "")))
+        ev["frequency"] = _snap_frequency(float(ev.get("frequency", 0)))
+        if ev.get("chord"):
+            ev["chord"] = _clean_note_name(str(ev["chord"]))
+
+    # ── Step 3: Confidence floor ──
+    events = [ev for ev in events if float(ev.get("confidence", 0)) >= confidence_floor]
+
+    # ── Step 4: Collapse rapid same-note repetitions ──
+    deduped: list[dict[str, Any]] = []
+    for ev in events:
+        if deduped and deduped[-1]["note"] == ev["note"]:
+            gap = ev["time"] - deduped[-1]["time"]
+            if gap < dedup_window:
+                continue  # too close and same note → skip
+        deduped.append(ev)
+    events = deduped
+
+    # ── Step 5: Minimum duration filter ──
+    filtered: list[dict[str, Any]] = []
+    for i, ev in enumerate(events):
+        if i < len(events) - 1:
+            duration = events[i + 1]["time"] - ev["time"]
+        else:
+            duration = min_duration  # keep the last event
+        if duration >= min_duration:
+            filtered.append(ev)
+
+    # ── Step 6: Merge identical consecutive chord events ──
+    merged: list[dict[str, Any]] = []
+    for ev in filtered:
+        if merged and merged[-1].get("chord") and merged[-1]["chord"] == ev.get("chord"):
+            continue
+        merged.append(ev)
+
+    return merged

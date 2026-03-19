@@ -266,12 +266,12 @@
     font-weight: 500;
 }
 
-/* ── Event List ── */
-.event-list-card {
+/* ── Chord Guide Grid ── */
+.chord-guide-card {
     padding: 0;
     overflow: hidden;
 }
-.event-list-header {
+.chord-guide-header {
     padding: 16px 20px;
     border-bottom: 1px solid var(--border);
     font-size: 13px;
@@ -285,65 +285,54 @@
     background: var(--bg-card);
     z-index: 2;
 }
-.event-list-scroll {
-    max-height: 480px;
+.chord-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 16px;
+    max-height: 550px;
     overflow-y: auto;
 }
-.event-list-scroll::-webkit-scrollbar { width: 4px; }
-.event-list-scroll::-webkit-scrollbar-track { background: transparent; }
-.event-list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.chord-grid::-webkit-scrollbar { width: 4px; }
+.chord-grid::-webkit-scrollbar-track { background: transparent; }
+.chord-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-.event-row {
-    display: grid;
-    grid-template-columns: 64px 1fr auto;
-    gap: 12px;
-    align-items: center;
-    padding: 10px 20px;
-    border-bottom: 1px solid rgba(42,46,66,0.5);
-    transition: background var(--transition);
-    cursor: pointer;
-    font-size: 13px;
+.chord-cell {
+    background: var(--bg-secondary);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    text-align: center;
+    transition: all 0.35s ease;
+    cursor: default;
 }
-.event-row:hover { background: var(--bg-card-hover); }
-.event-row.active {
+.chord-cell.active {
+    border-color: var(--accent);
     background: var(--accent-soft);
-    border-left: 3px solid var(--accent);
-    padding-left: 17px;
+    box-shadow: 0 0 20px var(--accent-glow), inset 0 0 12px rgba(108,140,255,0.06);
+    transform: scale(1.04);
 }
-.event-time {
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-    color: var(--text-muted);
-    font-size: 12px;
+.chord-cell-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    letter-spacing: 0.3px;
 }
-.event-row.active .event-time { color: var(--accent); }
-.event-note-info {
+.chord-cell.active .chord-cell-name {
+    color: var(--accent);
+}
+.chord-cell-diagram {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    justify-content: center;
 }
-.event-rhythm {
-    font-size: 16px;
-    color: var(--text-muted);
+.chord-cell-diagram svg {
+    width: 100%;
+    max-width: 140px;
+    height: auto;
 }
-.event-freq {
-    font-size: 11px;
-    color: var(--text-muted);
-    text-align: right;
-}
-
-/* ── Table head row for the event list ── */
-.event-list-cols {
-    display: grid;
-    grid-template-columns: 64px 1fr auto;
-    gap: 12px;
-    padding: 8px 20px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-bottom: 1px solid var(--border);
+@media (max-width: 520px) {
+    .chord-grid { grid-template-columns: 1fr; }
 }
 
 /* ══════════════════
@@ -437,34 +426,20 @@
         </div>
     </div>
 
-    <!-- RIGHT: Event List -->
-    <div class="card event-list-card">
-        <div class="event-list-header">
-            <span>Note Timeline</span>
-            <span class="badge badge-accent">{{ lead_events|length }}</span>
+    <!-- RIGHT: Chord Guide -->
+    <div class="card chord-guide-card">
+        <div class="chord-guide-header">
+            <span>Stabilized Chord Guide</span>
+            <span class="badge badge-accent" id="chordCount">0</span>
         </div>
-        <div class="event-list-cols">
-            <span>Time</span>
-            <span>Note / Chord</span>
-            <span>Hz</span>
-        </div>
-        <div class="event-list-scroll" id="eventListScroll">
-            {% for e in lead_events %}
-            <div class="event-row" data-index="{{ forloop.counter0 }}" data-time="{{ e.time }}">
-                <span class="event-time">{{ e.time|floatformat:2 }}s</span>
-                <span class="event-note-info">
-                    <span class="badge badge-accent">{{ e.note }}</span>
-                    {% if e.chord %}
-                        <span class="badge badge-dark">{{ e.chord }}</span>
-                    {% endif %}
-                    <span class="event-rhythm">{{ e.rhythm }}</span>
-                </span>
-                <span class="event-freq">{{ e.frequency|floatformat:1 }}</span>
-            </div>
-            {% endfor %}
+        <div class="chord-grid" id="chordGrid">
+            <!-- Filled by JS from the unique chord list -->
         </div>
     </div>
 </div>
+
+<!-- svguitar CDN — must load before the main script so SVGuitarChord is defined -->
+<script src="https://cdn.jsdelivr.net/npm/svguitar@2.5.0/dist/svguitar.umd.js"></script>
 
 <script>
 (function() {
@@ -628,16 +603,7 @@
         if (idx === activeIndex) return;
         activeIndex = idx;
 
-        // Update event list
-        var rows = document.querySelectorAll('.event-row');
-        for (var i = 0; i < rows.length; i++) {
-            rows[i].classList.toggle('active', i === idx);
-        }
-
-        // Scroll active into view
-        if (idx >= 0 && rows[idx]) {
-            rows[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        }
+        // (scroll-into-view removed — prevents page jumping during playback)
 
         // Update note markers
         var markers = markersContainer.querySelectorAll('.note-marker');
@@ -655,12 +621,13 @@
             });
         }
 
-        // Update instrument diagram
+        // Update instrument diagram + chord guide highlight
         if (idx >= 0) {
             var ev = events[idx];
             document.getElementById('currentNote').textContent = ev.note;
             document.getElementById('currentChord').textContent = ev.chord || '';
             renderInstrument(ev);
+            highlightChordCell(ev.chord);
         }
     }
 
@@ -741,18 +708,7 @@
         setActiveEvent(findActiveEvent());
     });
 
-    // Click on event row to seek
-    document.querySelectorAll('.event-row').forEach(function(row) {
-        row.addEventListener('click', function() {
-            var t = parseFloat(this.dataset.time);
-            currentTime = t;
-            if (hasAudio) audioEl.currentTime = t;
-            updateCursor();
-            updateTimeDisplay();
-            drawWaveform();
-            setActiveEvent(parseInt(this.dataset.index));
-        });
-    });
+    // (event-row click listeners removed — replaced by chord guide)
 
     // Speed control
     document.querySelectorAll('.speed-btn').forEach(function(btn) {
@@ -1241,6 +1197,128 @@
     }
 
     /* ═══════════════════════════════════════
+       CHORD GUIDE (svguitar)
+       ═══════════════════════════════════════ */
+    var chordGridEl = document.getElementById('chordGrid');
+    var chordCountEl = document.getElementById('chordCount');
+    var _activeChordName = null;
+
+    // Build unique chord list from events (preserving first-seen order)
+    var uniqueChords = [];
+    var seenChords = {};
+    for (var i = 0; i < events.length; i++) {
+        var ch = events[i].chord;
+        if (ch && !seenChords[ch]) {
+            seenChords[ch] = true;
+            uniqueChords.push(ch);
+        }
+    }
+    chordCountEl.textContent = uniqueChords.length;
+
+    // svguitar fingering definitions (matches utils.py _GUITAR_CHORD_FINGERINGS)
+    var svgChordDefs = {
+        'C Major':  { fingers: [[2,1],[3,2],[5,3]], barres: [], open: [1,4,6], muted: [5] },
+        'G Major':  { fingers: [[1,3],[5,2],[6,3]], barres: [], open: [2,3,4], muted: [] },
+        'D Major':  { fingers: [[3,2],[4,3],[2,2]], barres: [], open: [1], muted: [5,6] },
+        'A Major':  { fingers: [[2,2],[3,2],[4,2]], barres: [], open: [1,6], muted: [5] },
+        'E Major':  { fingers: [[3,1],[4,2],[5,2]], barres: [], open: [1,2,6], muted: [] },
+        'A Minor':  { fingers: [[2,1],[3,2],[4,2]], barres: [], open: [1,6], muted: [5] },
+        'E Minor':  { fingers: [[4,2],[5,2]], barres: [], open: [1,2,3,6], muted: [] },
+        'D Minor':  { fingers: [[2,1],[3,2],[4,3]], barres: [], open: [1], muted: [5,6] },
+        'F Major':  { fingers: [[3,2],[4,3]], barres: [{fromString:1,toString:6,fret:1}], open: [], muted: [] },
+        'B Minor':  { fingers: [[3,3],[4,4],[5,4]], barres: [{fromString:1,toString:5,fret:2}], open: [], muted: [6] }
+    };
+
+    function renderChordGrid() {
+        chordGridEl.innerHTML = '';
+
+        uniqueChords.forEach(function(chName) {
+            var cell = document.createElement('div');
+            cell.className = 'chord-cell';
+            cell.dataset.chord = chName;
+
+            var label = document.createElement('div');
+            label.className = 'chord-cell-name';
+            label.textContent = chName;
+            cell.appendChild(label);
+
+            var diagWrap = document.createElement('div');
+            diagWrap.className = 'chord-cell-diagram';
+
+            // Create an SVG container for svguitar
+            var svgContainer = document.createElement('div');
+            svgContainer.style.width = '140px';
+            svgContainer.style.height = '170px';
+            diagWrap.appendChild(svgContainer);
+            cell.appendChild(diagWrap);
+            chordGridEl.appendChild(cell);
+
+            // Render with svguitar if definition exists
+            if (typeof SVGuitarChord !== 'undefined' && svgChordDefs[chName]) {
+                var def = svgChordDefs[chName];
+                try {
+                    var chart = new SVGuitarChord(svgContainer);
+                    var cfg = {
+                        fingers: def.fingers,
+                        barres: def.barres || [],
+                    };
+                    chart
+                        .configure({
+                            strings: 6,
+                            frets: 4,
+                            color: '#9299b0',
+                            nutColor: '#e8eaf0',
+                            stringColor: '#5c6380',
+                            fretColor: '#2a2e42',
+                            backgroundColor: 'transparent',
+                            fingerColor: '#6c8cff',
+                            fingerTextColor: '#fff',
+                            nutWidth: 6,
+                            fingerSize: 0.7,
+                            titleColor: 'transparent',
+                            fixedDiagramPosition: true,
+                        })
+                        .chord(cfg)
+                        .draw();
+                } catch(e) {
+                    // Fallback: show text if svguitar fails
+                    svgContainer.textContent = '(diagram)';
+                    svgContainer.style.color = '#5c6380';
+                    svgContainer.style.fontSize = '11px';
+                    svgContainer.style.display = 'flex';
+                    svgContainer.style.alignItems = 'center';
+                    svgContainer.style.justifyContent = 'center';
+                }
+            } else {
+                // No svguitar or no definition — show simple placeholder
+                svgContainer.innerHTML = '<svg viewBox="0 0 80 90" xmlns="http://www.w3.org/2000/svg">' +
+                    '<text x="40" y="50" text-anchor="middle" fill="#5c6380" font-size="10" font-family="Inter,sans-serif">' +
+                    chName + '</text></svg>';
+            }
+        });
+    }
+
+    function highlightChordCell(chordName) {
+        if (chordName === _activeChordName) return;
+        _activeChordName = chordName;
+        var cells = chordGridEl.querySelectorAll('.chord-cell');
+        cells.forEach(function(c) {
+            c.classList.toggle('active', c.dataset.chord === chordName);
+        });
+        // Container-scoped scroll: never move the page itself
+        if (chordName) {
+            var active = chordGridEl.querySelector('.chord-cell.active');
+            if (active) {
+                var containerRect = chordGridEl.getBoundingClientRect();
+                var cellRect = active.getBoundingClientRect();
+                var offsetTop = cellRect.top - containerRect.top + chordGridEl.scrollTop;
+                var target = offsetTop - containerRect.height / 2 + cellRect.height / 2;
+                chordGridEl.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+            }
+        }
+    }
+
+    /* ═══════════════════════════════════════
        INIT
        ═══════════════════════════════════════ */
     function init() {
@@ -1248,6 +1326,7 @@
         buildNoteMarkers();
         updateTimeDisplay();
         renderRhythmBar();
+        renderChordGrid();
 
         // Render first event
         if (events.length > 0) {
