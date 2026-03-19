@@ -1,22 +1,352 @@
 {% extends 'transcription/base.html' %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card p-5">
-            <h2 class="text-center mb-4">Upload Audio</h2>
-            <p class="text-muted text-center">Select a .wav or .mp3 file to extract musical notes using AI.</p>
-            
-            <form method="post" enctype="multipart/form-data" class="mt-4">
-                {% csrf_token %}
-                <div class="mb-4">
-                    {{ form.as_p|safe }}
-                </div>
-                <div class="d-grid">
-                    <button type="submit" class="btn btn-primary">Start AI Transcription</button>
-                </div>
-            </form>
+<style>
+    .upload-wrapper {
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding-top: 48px;
+    }
+    .upload-card {
+        width: 100%;
+        max-width: 520px;
+        padding: 40px;
+    }
+    .upload-header {
+        text-align: center;
+        margin-bottom: 32px;
+    }
+    .upload-header h1 {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+    }
+    .upload-header p {
+        font-size: 14px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+    }
+
+    /* ── Instrument selector ── */
+    .instrument-group { margin-bottom: 24px; }
+    .instrument-options {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    .instrument-option {
+        position: relative;
+    }
+    .instrument-option input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    .instrument-option label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all var(--transition);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+    .instrument-option label:hover {
+        border-color: var(--border-light);
+        color: var(--text-primary);
+        background: var(--bg-card-hover);
+    }
+    .instrument-option input:checked + label {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        color: var(--accent);
+    }
+    .instrument-option label svg {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+        opacity: 0.7;
+    }
+    .instrument-option input:checked + label svg {
+        opacity: 1;
+    }
+    /* Make violin span full width */
+    .instrument-option.full-width {
+        grid-column: 1 / -1;
+    }
+
+    /* ── File upload zone ── */
+    .file-zone {
+        margin-bottom: 28px;
+    }
+    .file-drop {
+        border: 2px dashed var(--border);
+        border-radius: var(--radius-lg);
+        padding: 36px 24px;
+        text-align: center;
+        cursor: pointer;
+        transition: all var(--transition);
+        background: var(--bg-secondary);
+    }
+    .file-drop:hover, .file-drop.dragover {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+    }
+    .file-drop svg {
+        width: 36px;
+        height: 36px;
+        color: var(--text-muted);
+        margin-bottom: 12px;
+    }
+    .file-drop.dragover svg { color: var(--accent); }
+    .file-drop-text {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+    }
+    .file-drop-hint {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+    .file-drop-selected {
+        margin-top: 12px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--success);
+        display: none;
+    }
+    .file-drop-selected.visible { display: block; }
+    .file-drop input[type="file"] {
+        display: none;
+    }
+
+    /* ── Submit ── */
+    .submit-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .btn-submit {
+        width: 100%;
+        padding: 14px 24px;
+        font-size: 15px;
+    }
+    .submit-note {
+        text-align: center;
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    /* ── Steps indicator ── */
+    .steps {
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+        margin-bottom: 28px;
+    }
+    .step {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+    .step.active { color: var(--accent); }
+    .step-num {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 700;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+    }
+    .step.active .step-num {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+    }
+    .step-connector {
+        width: 20px;
+        height: 1px;
+        background: var(--border);
+    }
+</style>
+
+<div class="upload-wrapper">
+    <div class="card upload-card">
+        <div class="upload-header">
+            <h1>Upload Your Song</h1>
+            <p>Select your instrument and upload a WAV or MP3 file. Our AI will detect notes and create a learning guide.</p>
         </div>
+
+        <div class="steps">
+            <div class="step active">
+                <span class="step-num">1</span>
+                <span>Upload</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step">
+                <span class="step-num">2</span>
+                <span>Analyze</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step">
+                <span class="step-num">3</span>
+                <span>Learn</span>
+            </div>
+        </div>
+
+        <form method="post" enctype="multipart/form-data" id="uploadForm">
+            {% csrf_token %}
+
+            <!-- Instrument Selection -->
+            <div class="instrument-group">
+                <label class="form-label">Select Instrument</label>
+                <div class="instrument-options">
+                    <div class="instrument-option">
+                        <input type="radio" name="instrument" value="Acoustic Guitar" id="inst-guitar" checked>
+                        <label for="inst-guitar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M11.5 2v6M6 7h11l1 3-4 4v5a2 2 0 01-2 2h-2a2 2 0 01-2-2v-5L4 10l2-3z"/>
+                            </svg>
+                            Guitar
+                        </label>
+                    </div>
+                    <div class="instrument-option">
+                        <input type="radio" name="instrument" value="Electric Guitar" id="inst-eguitar">
+                        <label for="inst-eguitar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M11.5 2v4M8 5h7l2 3-3 4v6a2 2 0 01-2 2h-2a2 2 0 01-2-2v-6L5 8l3-3z"/>
+                                <path d="M10 15h4"/>
+                            </svg>
+                            Electric Guitar
+                        </label>
+                    </div>
+                    <div class="instrument-option">
+                        <input type="radio" name="instrument" value="Piano" id="inst-piano">
+                        <label for="inst-piano">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="4" width="20" height="16" rx="2"/>
+                                <path d="M6 4v10M10 4v10M14 4v10M18 4v10"/>
+                                <path d="M2 14h20"/>
+                            </svg>
+                            Piano
+                        </label>
+                    </div>
+                    <div class="instrument-option">
+                        <input type="radio" name="instrument" value="Casio (Electric Piano)" id="inst-casio">
+                        <label for="inst-casio">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="1" y="6" width="22" height="12" rx="2"/>
+                                <path d="M5 6v8M9 6v8M13 6v8M17 6v8"/>
+                                <path d="M1 14h22"/>
+                            </svg>
+                            Electric Piano
+                        </label>
+                    </div>
+                    <div class="instrument-option full-width">
+                        <input type="radio" name="instrument" value="Violin" id="inst-violin">
+                        <label for="inst-violin">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2v7M8 4h8M9 9c-3 2-5 5-5 8 0 3 3 5 8 5s8-2 8-5c0-3-2-6-5-8"/>
+                                <line x1="12" y1="14" x2="12" y2="19"/>
+                            </svg>
+                            Violin
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Upload Zone -->
+            <div class="file-zone">
+                <label class="form-label">Audio File</label>
+                <div class="file-drop" id="fileDrop">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <div class="file-drop-text">Click to browse or drag and drop</div>
+                    <div class="file-drop-hint">WAV or MP3 files only</div>
+                    <div class="file-drop-selected" id="fileName"></div>
+                    <input type="file" name="audio_file" id="audioFile" accept=".wav,.mp3" required>
+                </div>
+            </div>
+
+            <!-- Submit -->
+            <div class="submit-section">
+                <button type="submit" class="btn btn-primary btn-submit" id="uploadBtn">
+                    <span id="btnText">Start AI Transcription</span>
+                    <span class="spinner" id="spinner"></span>
+                </button>
+                <p class="submit-note">Analysis typically takes 15-60 seconds depending on file length.</p>
+            </div>
+        </form>
     </div>
 </div>
+
+<script>
+(function() {
+    const dropZone = document.getElementById('fileDrop');
+    const fileInput = document.getElementById('audioFile');
+    const fileNameEl = document.getElementById('fileName');
+    const form = document.getElementById('uploadForm');
+
+    // Click to browse
+    dropZone.addEventListener('click', function() {
+        fileInput.click();
+    });
+
+    // Drag & Drop
+    dropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', function() {
+        dropZone.classList.remove('dragover');
+    });
+    dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files;
+            showFileName(e.dataTransfer.files[0].name);
+        }
+    });
+
+    // File selected
+    fileInput.addEventListener('change', function() {
+        if (fileInput.files.length) {
+            showFileName(fileInput.files[0].name);
+        }
+    });
+
+    function showFileName(name) {
+        fileNameEl.textContent = name;
+        fileNameEl.classList.add('visible');
+    }
+
+    // Form submit
+    form.addEventListener('submit', function() {
+        var btn = document.getElementById('uploadBtn');
+        var text = document.getElementById('btnText');
+        var spinner = document.getElementById('spinner');
+        btn.disabled = true;
+        text.textContent = 'AI is analyzing your music...';
+        spinner.classList.add('active');
+    });
+})();
+</script>
 {% endblock %}

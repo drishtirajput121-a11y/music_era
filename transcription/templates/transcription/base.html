@@ -3,23 +3,260 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Musicra | AI Transcription</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Musicra — Learn to Play Any Song</title>
+    <meta name="description" content="AI-powered music learning platform. Upload a song, pick your instrument, and learn to play it note by note.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #f8f9fa; font-family: 'Inter', sans-serif; }
-        .navbar { background-color: #ffffff; border-bottom: 1px solid #dee2e6; }
-        .card { border: none; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .btn-primary { background-color: #0d6efd; border: none; padding: 10px 24px; border-radius: 8px; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary: #0f1117;
+            --bg-secondary: #161822;
+            --bg-card: #1c1f2e;
+            --bg-card-hover: #222640;
+            --border: #2a2e42;
+            --border-light: #353a52;
+            --text-primary: #e8eaf0;
+            --text-secondary: #9299b0;
+            --text-muted: #5c6380;
+            --accent: #6c8cff;
+            --accent-soft: rgba(108, 140, 255, 0.12);
+            --accent-glow: rgba(108, 140, 255, 0.25);
+            --success: #3dd68c;
+            --warning: #f5a623;
+            --danger: #e5484d;
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-xl: 20px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.25);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.35);
+            --transition: 180ms ease;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ── Navbar ── */
+        .navbar {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .navbar-inner {
+            max-width: 1280px;
+            width: 100%;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .navbar-brand {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            letter-spacing: -0.3px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .navbar-brand svg {
+            width: 22px;
+            height: 22px;
+            color: var(--accent);
+        }
+        .navbar-brand:hover { color: var(--accent); }
+        .navbar-tag {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--accent);
+            background: var(--accent-soft);
+            padding: 2px 8px;
+            border-radius: 999px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* ── Layout ── */
+        .main-container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 32px 24px 64px;
+        }
+
+        /* ── Cards ── */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* ── Buttons ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 10px 20px;
+            border-radius: var(--radius-md);
+            border: none;
+            cursor: pointer;
+            transition: all var(--transition);
+            text-decoration: none;
+            line-height: 1;
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background: #5a7af0;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+        .btn-primary:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-light);
+        }
+        .btn-secondary:hover {
+            color: var(--text-primary);
+            border-color: var(--text-secondary);
+            background: var(--bg-card-hover);
+        }
+
+        /* ── Form Elements ── */
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            letter-spacing: 0.3px;
+        }
+        .form-select, .form-input {
+            width: 100%;
+            padding: 10px 14px;
+            font-family: inherit;
+            font-size: 14px;
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            transition: border-color var(--transition);
+            outline: none;
+            appearance: auto;
+        }
+        .form-select:focus, .form-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+        .form-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* ── Badge ── */
+        .badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 999px;
+            line-height: 1.3;
+        }
+        .badge-accent {
+            background: var(--accent-soft);
+            color: var(--accent);
+        }
+        .badge-dark {
+            background: rgba(255,255,255,0.06);
+            color: var(--text-secondary);
+        }
+
+        /* ── Spinner ── */
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            display: none;
+        }
+        .spinner.active { display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Utility ── */
+        .text-muted { color: var(--text-muted); }
+        .text-secondary { color: var(--text-secondary); }
+        .text-accent { color: var(--accent); }
+        .fw-600 { font-weight: 600; }
+        .fw-700 { font-weight: 700; }
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0,0,0,0);
+            white-space: nowrap;
+        }
+
+        /* ── Print ── */
+        @media print {
+            body { background: #fff !important; color: #111 !important; }
+            .navbar, .no-print { display: none !important; }
+            .card { border: 1px solid #ccc !important; box-shadow: none !important; background: #fff !important; }
+            .main-container { max-width: 100% !important; padding: 0 !important; }
+            @page { size: A4; margin: 12mm; }
+        }
+
     </style>
+    {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <nav class="navbar navbar-light mb-5">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="#">🎸 Musicra</a>
+    <nav class="navbar" role="navigation" aria-label="Main navigation">
+        <div class="navbar-inner">
+            <a class="navbar-brand" href="{% url 'upload_audio' %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 18V5l12-2v13"/>
+                    <circle cx="6" cy="18" r="3"/>
+                    <circle cx="18" cy="16" r="3"/>
+                </svg>
+                Musicra
+            </a>
+            <span class="navbar-tag">AI Music Tutor</span>
         </div>
     </nav>
-    <div class="container">
+    <main class="main-container">
         {% block content %}{% endblock %}
-    </div>
+    </main>
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

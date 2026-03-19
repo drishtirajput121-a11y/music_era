@@ -1,61 +1,1271 @@
 {% extends 'transcription/base.html' %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-10">
-        <div class="card p-5 shadow-sm">
-            <h2 class="text-center fw-bold mb-4">Transcription Results 🎸</h2>
-            
-            <div class="row mb-4">
-                <div class="col-6">
-                    <div class="p-3 border rounded bg-light text-center">
-                        <small class="text-muted d-block">Sample Rate</small>
-                        <strong>{{ results.sr }} Hz</strong>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="p-3 border rounded bg-light text-center">
-                        <small class="text-muted d-block">Notes Detected</small>
-                        <strong>{{ results.time|length }}</strong>
-                    </div>
-                </div>
-            </div>
+<style>
+/* ══════════════════════════════════════════
+   RESULTS PAGE - MUSICRA LEARNING INTERFACE
+   ══════════════════════════════════════════ */
 
-            <h4 class="mb-3">Musical Timeline</h4>
-            <div class="table-responsive" style="max-height: 500px; overflow-y: auto; border: 1px solid #dee2e6;">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-dark sticky-top">
-                        <tr>
-                            <th>Time (s)</th>
-                            <th>Note</th>
-                            <th>Frequency</th>
-                            <th>Confidence</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for time, freq, conf, note in results.results_list %}
-                        {% widthratio conf 1 100 as conf_percent %}
-                        <tr>
-                            <td>{{ time|floatformat:2 }}s</td>
-                            <td><span class="badge bg-primary fs-6">{{ note }}</span></td>
-                            <td class="text-muted">{{ freq|floatformat:1 }} Hz</td>
-                            <td>
-                                <div class="progress" style="height: 6px; width: 100px;">
-                                    <div class="progress-bar bg-success" role="progressbar"
-                                         style="width: 0%;" data-width="{{ conf_percent }}"></div>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>            </div>
+/* ── Top Bar ── */
+.top-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+.top-bar-left h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+.top-bar-meta {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.top-bar-meta span { display: flex; align-items: center; gap: 4px; }
+.top-bar-actions { display: flex; gap: 8px; }
 
-            <div class="d-grid mt-5">
-                <a href="{% url 'upload_audio' %}" class="btn btn-outline-primary btn-lg">
-                    Upload Another Recording
-                </a>
+/* ── Waveform Player ── */
+.player-section {
+    margin-bottom: 24px;
+}
+.player-card {
+    padding: 20px 24px;
+}
+.player-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.player-header-left {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.player-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.player-time {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    min-width: 80px;
+    text-align: center;
+}
+.btn-play {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition);
+    padding: 0;
+}
+.btn-play:hover { background: #5a7af0; box-shadow: 0 0 16px var(--accent-glow); }
+.btn-play svg { width: 16px; height: 16px; }
+.speed-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.speed-btn {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all var(--transition);
+}
+.speed-btn:hover, .speed-btn.active {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+/* ── Waveform Canvas ── */
+.waveform-container {
+    position: relative;
+    height: 100px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    cursor: pointer;
+    border: 1px solid var(--border);
+}
+.waveform-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+.waveform-cursor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 2px;
+    height: 100%;
+    background: var(--accent);
+    pointer-events: none;
+    z-index: 2;
+    transition: left 50ms linear;
+    box-shadow: 0 0 6px var(--accent-glow);
+}
+/* Note markers on waveform */
+.note-markers {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+.note-marker {
+    position: absolute;
+    bottom: 4px;
+    transform: translateX(-50%);
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--accent);
+    opacity: 0.5;
+    transition: opacity 0.2s, color 0.2s;
+    line-height: 1;
+    pointer-events: none;
+}
+.note-marker.active {
+    opacity: 1;
+    color: #fff;
+}
+.note-marker-line {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    background: var(--accent);
+    opacity: 0.12;
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+.note-marker-line.active {
+    opacity: 0.5;
+}
+
+/* Play-now helper */
+.play-now-label {
+    position: absolute;
+    top: 6px;
+    transform: translateX(-50%);
+    font-size: 8px;
+    font-weight: 700;
+    color: var(--bg-primary);
+    background: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    white-space: nowrap;
+}
+.play-now-label.visible { opacity: 1; }
+
+/* ── Main Grid ── */
+.learning-grid {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 20px;
+}
+@media (max-width: 1024px) {
+    .learning-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ── Instrument Panel ── */
+.instrument-panel {
+    padding: 24px;
+}
+.instrument-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.instrument-panel-header h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.current-note-display {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.current-note {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+}
+.current-chord {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.instrument-canvas-wrap {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#instrumentCanvas {
+    width: 100%;
+    display: block;
+}
+
+/* ── Rhythm Bar ── */
+.rhythm-bar {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+.rhythm-bar-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.rhythm-arrows {
+    font-size: 20px;
+    letter-spacing: 4px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* ── Event List ── */
+.event-list-card {
+    padding: 0;
+    overflow: hidden;
+}
+.event-list-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    background: var(--bg-card);
+    z-index: 2;
+}
+.event-list-scroll {
+    max-height: 480px;
+    overflow-y: auto;
+}
+.event-list-scroll::-webkit-scrollbar { width: 4px; }
+.event-list-scroll::-webkit-scrollbar-track { background: transparent; }
+.event-list-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.event-row {
+    display: grid;
+    grid-template-columns: 64px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 20px;
+    border-bottom: 1px solid rgba(42,46,66,0.5);
+    transition: background var(--transition);
+    cursor: pointer;
+    font-size: 13px;
+}
+.event-row:hover { background: var(--bg-card-hover); }
+.event-row.active {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    padding-left: 17px;
+}
+.event-time {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+.event-row.active .event-time { color: var(--accent); }
+.event-note-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.event-rhythm {
+    font-size: 16px;
+    color: var(--text-muted);
+}
+.event-freq {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+}
+
+/* ── Table head row for the event list ── */
+.event-list-cols {
+    display: grid;
+    grid-template-columns: 64px 1fr auto;
+    gap: 12px;
+    padding: 8px 20px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* ══════════════════
+   PRINT OVERRIDES
+   ══════════════════ */
+@media print {
+    .learning-grid { grid-template-columns: 1fr !important; }
+    .event-list-scroll { max-height: none !important; overflow: visible !important; }
+    .waveform-container { height: 60px !important; }
+    .event-row { font-size: 10px !important; padding: 4px 12px !important; }
+    .badge { font-size: 9px !important; }
+}
+</style>
+
+<!-- ═══ HEADER ═══ -->
+<div class="top-bar">
+    <div class="top-bar-left">
+        <h1>Learning Session</h1>
+        <div class="top-bar-meta">
+            <span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                {{ lead_events|length }} events detected
+            </span>
+            <span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                {{ instrument }}
+            </span>
+            <span>{{ results.sr }} Hz sample rate</span>
+        </div>
+    </div>
+    <div class="top-bar-actions no-print">
+        <a href="{% url 'upload_audio' %}" class="btn btn-secondary">New Upload</a>
+        <button type="button" class="btn btn-secondary" onclick="window.print()">Print</button>
+    </div>
+</div>
+
+<!-- ═══ HIDDEN DATA ═══ -->
+{{ lead_events|json_script:"lead-events" }}
+<span id="audioUrlData" data-url="{{ audio_url|default:'' }}"></span>
+
+<!-- Hidden audio element for real playback -->
+<audio id="audioPlayer" preload="auto" style="display:none">
+    {% if audio_url %}
+    <source src="{{ audio_url }}">
+    {% endif %}
+</audio>
+
+<!-- ═══ WAVEFORM PLAYER ═══ -->
+<div class="player-section">
+    <div class="card player-card">
+        <div class="player-header">
+            <span class="player-header-left">Waveform Timeline</span>
+            <div class="player-controls">
+                <div class="speed-control no-print">
+                    <button class="speed-btn active" data-speed="1">1x</button>
+                    <button class="speed-btn" data-speed="0.75">0.75x</button>
+                    <button class="speed-btn" data-speed="0.5">0.5x</button>
+                </div>
+                <button class="btn-play" id="btnPlay" title="Play / Pause">
+                    <svg id="iconPlay" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <svg id="iconPause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                </button>
+                <span class="player-time" id="playerTime">0:00 / 0:00</span>
             </div>
+        </div>
+        <div class="waveform-container" id="waveformContainer">
+            <canvas class="waveform-canvas" id="waveformCanvas"></canvas>
+            <div class="waveform-cursor" id="waveformCursor"></div>
+            <div class="note-markers" id="noteMarkers"></div>
         </div>
     </div>
 </div>
+
+<!-- ═══ MAIN LEARNING GRID ═══ -->
+<div class="learning-grid">
+    <!-- LEFT: Instrument Diagram -->
+    <div class="card instrument-panel">
+        <div class="instrument-panel-header">
+            <h2 id="instrumentTitle">{{ instrument }} — Learning Guide</h2>
+            <div class="current-note-display">
+                <span class="current-note" id="currentNote">--</span>
+                <span class="current-chord" id="currentChord"></span>
+            </div>
+        </div>
+        <div class="instrument-canvas-wrap">
+            <svg id="instrumentCanvas" viewBox="0 0 600 240"></svg>
+        </div>
+        <div class="rhythm-bar">
+            <div class="rhythm-bar-label">Strum Pattern</div>
+            <div class="rhythm-arrows" id="rhythmRow"></div>
+        </div>
+    </div>
+
+    <!-- RIGHT: Event List -->
+    <div class="card event-list-card">
+        <div class="event-list-header">
+            <span>Note Timeline</span>
+            <span class="badge badge-accent">{{ lead_events|length }}</span>
+        </div>
+        <div class="event-list-cols">
+            <span>Time</span>
+            <span>Note / Chord</span>
+            <span>Hz</span>
+        </div>
+        <div class="event-list-scroll" id="eventListScroll">
+            {% for e in lead_events %}
+            <div class="event-row" data-index="{{ forloop.counter0 }}" data-time="{{ e.time }}">
+                <span class="event-time">{{ e.time|floatformat:2 }}s</span>
+                <span class="event-note-info">
+                    <span class="badge badge-accent">{{ e.note }}</span>
+                    {% if e.chord %}
+                        <span class="badge badge-dark">{{ e.chord }}</span>
+                    {% endif %}
+                    <span class="event-rhythm">{{ e.rhythm }}</span>
+                </span>
+                <span class="event-freq">{{ e.frequency|floatformat:1 }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    /* ═══════════════════════════════════════
+       DATA & STATE
+       ═══════════════════════════════════════ */
+    var events = JSON.parse(document.getElementById('lead-events').textContent || '[]');
+    var instrument = "{{ instrument|escapejs }}";
+    var totalDuration = events.length ? events[events.length - 1].time + 1 : 10;
+    var isPlaying = false;
+    var playbackSpeed = 1;
+    var currentTime = 0;
+    var activeIndex = -1;
+    var animFrame = null;
+    var lastTick = 0;
+
+    /* ═══════════════════════════════════════
+       AUDIO ELEMENT (Issue 1 fix)
+       ═══════════════════════════════════════ */
+    var audioEl = document.getElementById('audioPlayer');
+    var hasAudio = audioEl && audioEl.querySelector('source') && audioEl.querySelector('source').getAttribute('src');
+
+    // Once audio metadata loads, use its real duration for the timeline
+    if (hasAudio) {
+        audioEl.addEventListener('loadedmetadata', function() {
+            totalDuration = audioEl.duration || totalDuration;
+            updateTimeDisplay();
+            drawWaveform();
+            buildNoteMarkers();
+        });
+        audioEl.addEventListener('ended', function() {
+            stopPlayback();
+        });
+    }
+
+    /* ═══════════════════════════════════════
+       WAVEFORM DRAWING
+       ═══════════════════════════════════════ */
+    var canvas = document.getElementById('waveformCanvas');
+    var ctx = canvas.getContext('2d');
+
+    function drawWaveform() {
+        var rect = canvas.parentElement.getBoundingClientRect();
+        canvas.width = rect.width * (window.devicePixelRatio || 1);
+        canvas.height = rect.height * (window.devicePixelRatio || 1);
+        ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+
+        var w = rect.width;
+        var h = rect.height;
+        var midY = h / 2;
+
+        // Background
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary').trim();
+        ctx.fillRect(0, 0, w, h);
+
+        // Generate a pseudo-waveform based on event density
+        var barCount = Math.floor(w / 3);
+        var barW = 2;
+        var gap = 1;
+
+        // Build density map
+        var density = new Array(barCount).fill(0);
+        for (var i = 0; i < events.length; i++) {
+            var pos = Math.floor((events[i].time / totalDuration) * barCount);
+            if (pos >= 0 && pos < barCount) {
+                density[pos] += events[i].confidence || 0.5;
+            }
+        }
+        // Smooth
+        var smoothed = new Array(barCount).fill(0);
+        for (var i = 0; i < barCount; i++) {
+            var sum = 0, cnt = 0;
+            for (var j = Math.max(0, i - 3); j <= Math.min(barCount - 1, i + 3); j++) {
+                sum += density[j]; cnt++;
+            }
+            smoothed[i] = sum / cnt;
+        }
+        // Normalize
+        var maxD = Math.max.apply(null, smoothed) || 1;
+
+        for (var i = 0; i < barCount; i++) {
+            var amp = 0.15 + (smoothed[i] / maxD) * 0.7;
+            var barH = amp * (h * 0.7);
+            var x = i * (barW + gap);
+            var progress = currentTime / totalDuration;
+            var barProgress = i / barCount;
+
+            if (barProgress <= progress) {
+                ctx.fillStyle = 'rgba(108,140,255,0.6)';
+            } else {
+                ctx.fillStyle = 'rgba(146,153,176,0.25)';
+            }
+            ctx.fillRect(x, midY - barH / 2, barW, barH);
+        }
+    }
+
+    /* ═══════════════════════════════════════
+       NOTE MARKERS ON WAVEFORM
+       ═══════════════════════════════════════ */
+    var markersContainer = document.getElementById('noteMarkers');
+
+    function buildNoteMarkers() {
+        markersContainer.innerHTML = '';
+        // Show at most ~60 markers to avoid clutter
+        var step = Math.max(1, Math.floor(events.length / 60));
+        for (var i = 0; i < events.length; i += step) {
+            var e = events[i];
+            var pct = (e.time / totalDuration) * 100;
+
+            var line = document.createElement('div');
+            line.className = 'note-marker-line';
+            line.style.left = pct + '%';
+            line.dataset.idx = i;
+            markersContainer.appendChild(line);
+
+            var label = document.createElement('div');
+            label.className = 'note-marker';
+            label.style.left = pct + '%';
+            label.textContent = e.note.replace(/\d+/, '');
+            label.dataset.idx = i;
+            markersContainer.appendChild(label);
+        }
+    }
+
+    /* ═══════════════════════════════════════
+       CURSOR & PLAYBACK
+       ═══════════════════════════════════════ */
+    var cursor = document.getElementById('waveformCursor');
+    var btnPlay = document.getElementById('btnPlay');
+    var iconPlay = document.getElementById('iconPlay');
+    var iconPause = document.getElementById('iconPause');
+    var playerTimeEl = document.getElementById('playerTime');
+
+    function updateCursor() {
+        var pct = (currentTime / totalDuration) * 100;
+        cursor.style.left = Math.min(pct, 100) + '%';
+    }
+
+    function formatTime(s) {
+        var m = Math.floor(s / 60);
+        var sec = Math.floor(s % 60);
+        return m + ':' + (sec < 10 ? '0' : '') + sec;
+    }
+
+    function updateTimeDisplay() {
+        playerTimeEl.textContent = formatTime(currentTime) + ' / ' + formatTime(totalDuration);
+    }
+
+    function findActiveEvent() {
+        var idx = -1;
+        for (var i = 0; i < events.length; i++) {
+            if (events[i].time <= currentTime) idx = i;
+            else break;
+        }
+        return idx;
+    }
+
+    function setActiveEvent(idx) {
+        if (idx === activeIndex) return;
+        activeIndex = idx;
+
+        // Update event list
+        var rows = document.querySelectorAll('.event-row');
+        for (var i = 0; i < rows.length; i++) {
+            rows[i].classList.toggle('active', i === idx);
+        }
+
+        // Scroll active into view
+        if (idx >= 0 && rows[idx]) {
+            rows[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+
+        // Update note markers
+        var markers = markersContainer.querySelectorAll('.note-marker');
+        var lines = markersContainer.querySelectorAll('.note-marker-line');
+        markers.forEach(function(m) { m.classList.remove('active'); });
+        lines.forEach(function(l) { l.classList.remove('active'); });
+
+        // Find closest visible marker
+        if (idx >= 0) {
+            markers.forEach(function(m) {
+                if (Math.abs(parseInt(m.dataset.idx) - idx) <= 1) m.classList.add('active');
+            });
+            lines.forEach(function(l) {
+                if (Math.abs(parseInt(l.dataset.idx) - idx) <= 1) l.classList.add('active');
+            });
+        }
+
+        // Update instrument diagram
+        if (idx >= 0) {
+            var ev = events[idx];
+            document.getElementById('currentNote').textContent = ev.note;
+            document.getElementById('currentChord').textContent = ev.chord || '';
+            renderInstrument(ev);
+        }
+    }
+
+    function tick(ts) {
+        if (!isPlaying) return;
+        if (hasAudio && !audioEl.paused) {
+            // Drive timeline from real audio position (stays perfectly in sync)
+            currentTime = audioEl.currentTime;
+        } else if (!hasAudio) {
+            // Fallback: animate by wall-clock when no audio file
+            if (lastTick) {
+                var dt = (ts - lastTick) / 1000 * playbackSpeed;
+                currentTime += dt;
+                if (currentTime >= totalDuration) {
+                    currentTime = 0;
+                    stopPlayback();
+                    return;
+                }
+            }
+            lastTick = ts;
+        } else {
+            // Audio exists but is still loading / buffering — just advance
+            if (lastTick) {
+                currentTime += (ts - lastTick) / 1000 * playbackSpeed;
+            }
+            lastTick = ts;
+        }
+        updateCursor();
+        updateTimeDisplay();
+        drawWaveform();
+        var idx = findActiveEvent();
+        setActiveEvent(idx);
+        animFrame = requestAnimationFrame(tick);
+    }
+
+    function startPlayback() {
+        isPlaying = true;
+        lastTick = 0;
+        iconPlay.style.display = 'none';
+        iconPause.style.display = 'block';
+        if (hasAudio) {
+            // Resume AudioContext on user gesture (fixes autoplay restriction)
+            audioEl.playbackRate = playbackSpeed;
+            audioEl.currentTime = currentTime;
+            var playPromise = audioEl.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(function(err) {
+                    console.warn('Audio play blocked:', err);
+                });
+            }
+        }
+        animFrame = requestAnimationFrame(tick);
+    }
+
+    function stopPlayback() {
+        isPlaying = false;
+        lastTick = 0;
+        iconPlay.style.display = 'block';
+        iconPause.style.display = 'none';
+        if (hasAudio) audioEl.pause();
+        if (animFrame) cancelAnimationFrame(animFrame);
+    }
+
+    btnPlay.addEventListener('click', function() {
+        if (isPlaying) stopPlayback();
+        else startPlayback();
+    });
+
+    // Click on waveform to seek
+    document.getElementById('waveformContainer').addEventListener('click', function(e) {
+        var rect = this.getBoundingClientRect();
+        var x = e.clientX - rect.left;
+        currentTime = (x / rect.width) * totalDuration;
+        if (hasAudio) audioEl.currentTime = currentTime;
+        updateCursor();
+        updateTimeDisplay();
+        drawWaveform();
+        setActiveEvent(findActiveEvent());
+    });
+
+    // Click on event row to seek
+    document.querySelectorAll('.event-row').forEach(function(row) {
+        row.addEventListener('click', function() {
+            var t = parseFloat(this.dataset.time);
+            currentTime = t;
+            if (hasAudio) audioEl.currentTime = t;
+            updateCursor();
+            updateTimeDisplay();
+            drawWaveform();
+            setActiveEvent(parseInt(this.dataset.index));
+        });
+    });
+
+    // Speed control
+    document.querySelectorAll('.speed-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.speed-btn').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            playbackSpeed = parseFloat(btn.dataset.speed);
+            if (hasAudio) audioEl.playbackRate = playbackSpeed;
+        });
+    });
+
+    /* ═══════════════════════════════════════
+       INSTRUMENT RENDERERS (SVG)
+       ═══════════════════════════════════════ */
+    var svgEl = document.getElementById('instrumentCanvas');
+    var NS = 'http://www.w3.org/2000/svg';
+
+    function clearSVG() {
+        while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+    }
+
+    function svgNode(tag, attrs) {
+        var n = document.createElementNS(NS, tag);
+        for (var k in attrs) {
+            if (attrs.hasOwnProperty(k)) n.setAttribute(k, attrs[k]);
+        }
+        return n;
+    }
+
+    function textNode(x, y, text, attrs) {
+        var t = svgNode('text', Object.assign({ x: x, y: y, fill: '#9299b0', 'font-size': '11', 'font-family': 'Inter, sans-serif' }, attrs || {}));
+        t.textContent = text;
+        return t;
+    }
+
+    /* ── Note helper (Issue 2 fix: robust parsing) ── */
+    var pcMap = {C:0,"C#":1,Db:1,D:2,"D#":3,Eb:3,E:4,F:5,"F#":6,Gb:6,G:7,"G#":8,Ab:8,A:9,"A#":10,Bb:10,B:11};
+
+    /**
+     * Parse a raw note string (e.g. "F~4", "C#5", "Db4", "G#3", "E4") into
+     * { name: "F"|"C#"|"Db"…, octave: 4, pc: 0-11 }
+     * Returns null if unparseable.
+     */
+    function parseNote(raw) {
+        if (!raw) return null;
+        // Strip any tilde ~ or whitespace
+        var s = raw.replace(/[~\s]/g, '');
+        // Match: optional letter A-G, optional accidental (#/b), optional digit(s)
+        var m = s.match(/^([A-Ga-g])([#b]?)(\d*)/);
+        if (!m) return null;
+        var letter = m[1].toUpperCase();
+        var acc    = m[2]; // '#', 'b', or ''
+        var octStr = m[3];
+        var name   = letter + acc;
+        // Normalise 'b' accidentals: use Db, Eb, Gb, Ab, Bb
+        if (acc === 'b') name = letter + 'b';
+        var pc = pcMap[name];
+        if (pc === undefined) return null;
+        return { name: name, octave: octStr ? parseInt(octStr) : 4, pc: pc };
+    }
+
+    function noteNameOnly(note) {
+        // Legacy helper — used for piano/violin
+        var p = parseNote(note);
+        return p ? p.name : (note || '');
+    }
+
+    /* ── Chord Fingering Map ── */
+    var chordMap = {
+        "D Major":  [{s:2, f:3}, {s:3, f:2}, {s:4, f:1}],
+        "C Major":  [{s:2, f:1}, {s:3, f:2}, {s:5, f:3}],
+        "G Major":  [{s:1, f:3}, {s:6, f:3}, {s:5, f:2}],
+        "A Major":  [{s:2, f:2}, {s:3, f:2}, {s:4, f:2}],
+        "E Major":  [{s:3, f:1}, {s:4, f:2}, {s:5, f:2}],
+        "A Minor":  [{s:2, f:1}, {s:3, f:2}, {s:4, f:2}],
+        "E Minor":  [{s:4, f:2}, {s:5, f:2}],
+        "D Minor":  [{s:2, f:1}, {s:3, f:2}, {s:4, f:3}]
+    };
+
+    /*
+     * Issue 4 fix: maps a single note to one or more {s, f} fret dots.
+     * stringOpenPCs[0..5] = pitch classes for strings top→bottom (e, B, G, D, A, E).
+     * Tries every string, picks lowest fret (0 = open, max 5 fret).
+     */
+    function singleNoteToFretDots(noteRaw, stringOpenPCs) {
+        var parsed = parseNote(noteRaw);
+        if (!parsed) return [];
+        var pc     = parsed.pc;
+        var octave = parsed.octave;
+        var dots   = [];
+        var MAX_FRET = 5;
+
+        for (var si = 0; si < 6; si++) {
+            var openPC = stringOpenPCs[si];
+            // semitones from open string to target pc (ignoring octave for now)
+            var diff = (pc - openPC + 12) % 12;
+            if (diff <= MAX_FRET) {
+                dots.push({ s: si + 1, f: diff }); // s is 1-indexed
+                break; // use the first (highest) string that works
+            }
+        }
+        return dots;
+    }
+
+    /* ──────────── GUITAR ──────────── */
+    function renderGuitar(ev, isElectric) {
+        clearSVG();
+        svgEl.setAttribute('viewBox', '0 0 600 240');
+
+        var chord = ev.chord;
+        var note  = ev.note;
+
+        // Fretboard geometry
+        var left = 60, top = 20, fretW = 90, fretCount = 5, stringCount = 6;
+        var gridW = fretW * fretCount;
+        var stringGap = 30;
+        var gridH = stringGap * (stringCount - 1);
+
+        // Fretboard background
+        var bgColor = isElectric ? '#1a1d2c' : '#2a2418';
+        svgEl.appendChild(svgNode('rect', {
+            x: left, y: top, width: gridW, height: gridH, rx: 4,
+            fill: bgColor, stroke: '#3a3f55', 'stroke-width': 1
+        }));
+
+        // Nut (thick line at fret 0)
+        svgEl.appendChild(svgNode('rect', {
+            x: left - 3, y: top, width: 6, height: gridH,
+            fill: isElectric ? '#555' : '#d4c9a8', rx: 1
+        }));
+
+        // Frets
+        for (var f = 1; f <= fretCount; f++) {
+            var x = left + f * fretW;
+            svgEl.appendChild(svgNode('line', {
+                x1: x, y1: top, x2: x, y2: top + gridH,
+                stroke: isElectric ? '#4a4f65' : '#8a7e60', 'stroke-width': 1.5
+            }));
+        }
+
+        // Fret numbers (below diagram)
+        for (var f = 1; f <= fretCount; f++) {
+            var x = left + (f - 0.5) * fretW;
+            svgEl.appendChild(textNode(x, top + gridH + 18, '' + f, {
+                'text-anchor': 'middle', 'font-size': '10', fill: '#5c6380'
+            }));
+        }
+
+        // Fret dots (markers on 3rd and 5th)
+        [3, 5].forEach(function(f) {
+            if (f <= fretCount) {
+                var cx = left + (f - 0.5) * fretW;
+                var cy = top + gridH / 2;
+                svgEl.appendChild(svgNode('circle', {
+                    cx: cx, cy: cy, r: 4,
+                    fill: isElectric ? '#333850' : '#3d3622', opacity: '0.5'
+                }));
+            }
+        });
+
+        /*
+         * Issue 3 fix: Standard guitar tuning — string index 0 = HIGH e (top of diagram),
+         * string index 5 = LOW E (bottom). String labels on the LEFT side.
+         *
+         * SVG y increases downward, so:
+         *   y = top + 0*stringGap   → top row    = string 1 (high e)
+         *   y = top + 5*stringGap   → bottom row = string 6 (low E)
+         *
+         * Standard (low→high): E2 A2 D3 G3 B3 E4
+         * In diagram order top-to-bottom (high→low): e B G D A E
+         */
+        var stringNames    = ['e', 'B', 'G', 'D', 'A', 'E'];  // top→bottom
+        var stringOpenPCs  = [4,   11,  7,   2,   9,   4];     // e4 B3 G3 D3 A2 E2
+
+        for (var s = 0; s < stringCount; s++) {
+            var y = top + s * stringGap;
+            // Thickness increases toward low E (bottom)
+            var thickness = 0.8 + s * 0.35;
+            svgEl.appendChild(svgNode('line', {
+                x1: left - 3, y1: y, x2: left + gridW, y2: y,
+                stroke: isElectric ? '#8899bb' : '#b0a080',
+                'stroke-width': thickness
+            }));
+            // String label
+            svgEl.appendChild(textNode(left - 22, y + 4, stringNames[s], {
+                'text-anchor': 'middle', 'font-size': '11', fill: '#5c6380', 'font-weight': '600'
+            }));
+        }
+
+        /* ── Determine dots to draw ── */
+        var dots = [];
+
+        if (chord && chordMap[chord]) {
+            // Issue 4: chord path (unchanged, use existing chordMap)
+            dots = chordMap[chord];
+        } else {
+            // Issue 4 fix: single-note path — map parsed note to fretboard position
+            dots = singleNoteToFretDots(note, stringOpenPCs);
+        }
+
+        dots.forEach(function(d) {
+            // d.s is 1-indexed string number (1 = top/high e, 6 = bottom/low E)
+            if (d.s < 1 || d.s > 6 || d.f < 0 || d.f > fretCount) return;
+            var cx = left + (d.f - 0.5) * fretW;
+            var cy = top + (d.s - 1) * stringGap;
+
+            if (d.f === 0) {
+                // Open string — draw small hollow circle near nut
+                svgEl.appendChild(svgNode('circle', {
+                    cx: left - 14, cy: cy, r: 6,
+                    fill: 'none', stroke: '#6c8cff', 'stroke-width': 2
+                }));
+                return;
+            }
+
+            // Glow
+            svgEl.appendChild(svgNode('circle', { cx: cx, cy: cy, r: 14, fill: 'rgba(108,140,255,0.15)' }));
+            // Dot
+            svgEl.appendChild(svgNode('circle', { cx: cx, cy: cy, r: 9, fill: '#6c8cff', stroke: '#fff', 'stroke-width': 1.5 }));
+            // Note name inside dot
+            var parsed = parseNote(note);
+            if (!chord && parsed) {
+                svgEl.appendChild(textNode(cx, cy + 4, parsed.name, {
+                    'text-anchor': 'middle', 'font-size': '7', fill: '#fff', 'font-weight': '700'
+                }));
+            }
+        });
+
+        // Note / Chord info panel
+        var infoX = left + gridW + 16;
+        svgEl.appendChild(textNode(infoX, top + 16, 'Note: ' + note, {
+            'font-size': '13', fill: '#6c8cff', 'font-weight': '600'
+        }));
+        if (chord) {
+            svgEl.appendChild(textNode(infoX, top + 36, 'Chord: ' + chord, {
+                'font-size': '12', fill: '#9299b0'
+            }));
+        }
+
+        // Pluck hint
+        if (dots.length > 0 && dots[0].f > 0) {
+            var pluckStr = dots[0].s;
+            var strLabel = stringNames[pluckStr - 1];
+            svgEl.appendChild(textNode(infoX, top + 58, 'Pluck: str ' + pluckStr + ' (' + strLabel + ')', {
+                'font-size': '11', fill: '#5c6380'
+            }));
+        }
+    }
+
+    /* ──────────── PIANO ──────────── */
+    function renderPiano(ev, isElectric) {
+        clearSVG();
+        svgEl.setAttribute('viewBox', '0 0 600 200');
+
+        var note = ev.note;
+        var noteName = noteNameOnly(note);
+        var pc = pcMap[noteName];
+
+        // Draw 2 octaves (14 white keys)
+        var startX = 20, topY = 20;
+        var whiteW = 38, whiteH = 140;
+        var blackW = 22, blackH = 88;
+        var whiteCount = 14;
+
+        // White key labels for 2 octaves
+        var whiteNotes = ['C','D','E','F','G','A','B','C','D','E','F','G','A','B'];
+        var whitePCs  = [0, 2, 4, 5, 7, 9, 11, 0, 2, 4, 5, 7, 9, 11];
+
+        var highlightWhite = -1;
+        var highlightBlack = -1;
+        var isBlack = [1,3,6,8,10].indexOf(pc) !== -1;
+
+        // White keys
+        for (var i = 0; i < whiteCount; i++) {
+            var x = startX + i * whiteW;
+            var isActive = (whitePCs[i] === pc && !isBlack);
+            var fill = isActive ? (isElectric ? '#3a4a70' : '#cfe2ff') : (isElectric ? '#1a1d2c' : '#ffffff');
+            var stroke = isElectric ? '#333850' : '#999';
+
+            svgEl.appendChild(svgNode('rect', {
+                x: x, y: topY, width: whiteW - 1, height: whiteH, rx: 3,
+                fill: fill, stroke: stroke, 'stroke-width': 1
+            }));
+
+            if (isActive) {
+                // Glow for active
+                svgEl.appendChild(svgNode('rect', {
+                    x: x, y: topY, width: whiteW - 1, height: whiteH, rx: 3,
+                    fill: isElectric ? 'rgba(108,140,255,0.15)' : 'rgba(108,140,255,0.1)',
+                    stroke: '#6c8cff', 'stroke-width': 2
+                }));
+                highlightWhite = i;
+            }
+
+            // Key label at bottom
+            svgEl.appendChild(textNode(x + whiteW / 2 - 1, topY + whiteH - 10, whiteNotes[i], {
+                'text-anchor': 'middle', 'font-size': '10',
+                fill: isActive ? '#6c8cff' : '#5c6380',
+                'font-weight': isActive ? '700' : '400'
+            }));
+        }
+
+        // Black keys
+        var blackPositions = [0, 1, 3, 4, 5, 7, 8, 10, 11, 12];
+        var blackPCs_arr = [1, 3, 6, 8, 10, 1, 3, 6, 8, 10];
+        var blackLabels = ['C#','D#','F#','G#','A#','C#','D#','F#','G#','A#'];
+
+        for (var b = 0; b < blackPositions.length; b++) {
+            var bpos = blackPositions[b];
+            var x = startX + bpos * whiteW + whiteW * 0.65;
+            var isActiveB = (blackPCs_arr[b] === pc && isBlack);
+            var fill = isActiveB ? '#6c8cff' : (isElectric ? '#0a0c14' : '#222');
+
+            svgEl.appendChild(svgNode('rect', {
+                x: x, y: topY, width: blackW, height: blackH, rx: 2,
+                fill: fill, stroke: isElectric ? '#222640' : '#111', 'stroke-width': 1
+            }));
+
+            if (isActiveB) {
+                highlightBlack = b;
+                svgEl.appendChild(svgNode('rect', {
+                    x: x, y: topY, width: blackW, height: blackH, rx: 2,
+                    fill: 'rgba(108,140,255,0.3)', stroke: '#6c8cff', 'stroke-width': 2
+                }));
+            }
+        }
+
+        // Note indicator
+        svgEl.appendChild(textNode(startX, topY + whiteH + 30, 'Play: ' + note, {
+            'font-size': '14', fill: '#6c8cff', 'font-weight': '700'
+        }));
+        if (ev.chord) {
+            svgEl.appendChild(textNode(startX + 120, topY + whiteH + 30, 'Chord: ' + ev.chord, {
+                'font-size': '12', fill: '#9299b0'
+            }));
+        }
+
+        // Hand indicator
+        var octave = parseInt(note.replace(/\D/g, '')) || 4;
+        var hand = octave < 4 ? 'Left Hand' : 'Right Hand';
+        svgEl.appendChild(textNode(startX + whiteW * whiteCount - 60, topY + whiteH + 30, hand, {
+            'font-size': '11', fill: '#5c6380', 'text-anchor': 'end'
+        }));
+    }
+
+    /* ──────────── VIOLIN ──────────── */
+    function renderViolin(ev) {
+        clearSVG();
+        svgEl.setAttribute('viewBox', '0 0 600 240');
+
+        var note = ev.note;
+        var noteName = noteNameOnly(note);
+        var pc = pcMap[noteName];
+
+        var left = 60, top = 30;
+        var boardW = 440, boardH = 120;
+        var stringCount = 4;
+        var stringGap = boardH / (stringCount - 1);
+        var positionCount = 7;
+        var posW = boardW / positionCount;
+
+        // Violin strings: G, D, A, E (low to high)
+        var stringNames = ['G', 'D', 'A', 'E'];
+        var stringPCs = [7, 2, 9, 4]; // open string pitch classes
+
+        // Fingerboard
+        svgEl.appendChild(svgNode('rect', {
+            x: left, y: top, width: boardW, height: boardH, rx: 6,
+            fill: '#1e1a14', stroke: '#3a3526', 'stroke-width': 1
+        }));
+
+        // Nut
+        svgEl.appendChild(svgNode('rect', {
+            x: left - 2, y: top, width: 4, height: boardH,
+            fill: '#a09070', rx: 1
+        }));
+
+        // Position markers (dashed)
+        for (var p = 1; p <= positionCount; p++) {
+            var x = left + p * posW;
+            svgEl.appendChild(svgNode('line', {
+                x1: x, y1: top, x2: x, y2: top + boardH,
+                stroke: '#3a3526', 'stroke-width': 1, 'stroke-dasharray': '4 4'
+            }));
+            svgEl.appendChild(textNode(x, top + boardH + 18, '' + p, {
+                'text-anchor': 'middle', 'font-size': '10', fill: '#5c6380'
+            }));
+        }
+
+        // Strings
+        for (var s = 0; s < stringCount; s++) {
+            var y = top + s * stringGap;
+            var thickness = 3 - s * 0.5;
+            svgEl.appendChild(svgNode('line', {
+                x1: left - 2, y1: y, x2: left + boardW, y2: y,
+                stroke: '#b0a080', 'stroke-width': Math.max(0.8, thickness)
+            }));
+            svgEl.appendChild(textNode(left - 24, y + 4, stringNames[s], {
+                'text-anchor': 'middle', 'font-size': '12', fill: '#9299b0', 'font-weight': '600'
+            }));
+        }
+
+        // Find which string/position for the note
+        // Simple mapping: check which string contains this note
+        var activeString = -1;
+        var activePos = 1;
+        if (pc !== undefined) {
+            for (var s = 0; s < stringCount; s++) {
+                var diff = (pc - stringPCs[s] + 12) % 12;
+                if (diff <= positionCount) {
+                    activeString = s;
+                    activePos = diff || 1;
+                    break;
+                }
+            }
+        }
+
+        if (activeString >= 0) {
+            var cx = left + (activePos - 0.5) * posW;
+            var cy = top + activeString * stringGap;
+
+            // String highlight
+            svgEl.appendChild(svgNode('line', {
+                x1: left - 2, y1: cy, x2: left + boardW, y2: cy,
+                stroke: 'rgba(108,140,255,0.3)', 'stroke-width': 8
+            }));
+
+            // Finger glow
+            svgEl.appendChild(svgNode('circle', {
+                cx: cx, cy: cy, r: 18,
+                fill: 'rgba(108,140,255,0.12)'
+            }));
+            // Finger dot
+            svgEl.appendChild(svgNode('circle', {
+                cx: cx, cy: cy, r: 11,
+                fill: '#6c8cff', stroke: '#fff', 'stroke-width': 1.5
+            }));
+            // Note name in dot
+            svgEl.appendChild(textNode(cx, cy + 4, noteName, {
+                'text-anchor': 'middle', 'font-size': '9', fill: '#fff', 'font-weight': '700'
+            }));
+
+            // Bow direction hint
+            var bowDir = ev.rhythm === '\u2193' ? 'Down Bow' : 'Up Bow';
+            svgEl.appendChild(textNode(left + boardW + 16, top + 20, bowDir, {
+                'font-size': '12', fill: '#6c8cff', 'font-weight': '600'
+            }));
+        }
+
+        // Note info
+        svgEl.appendChild(textNode(left + boardW + 16, top + 50, 'Note: ' + note, {
+            'font-size': '12', fill: '#9299b0'
+        }));
+        if (ev.chord) {
+            svgEl.appendChild(textNode(left + boardW + 16, top + 70, 'Chord: ' + ev.chord, {
+                'font-size': '11', fill: '#5c6380'
+            }));
+        }
+    }
+
+    /* ═══════════════════════════════════════
+       INSTRUMENT ROUTER
+       ═══════════════════════════════════════ */
+    function renderInstrument(ev) {
+        if (!ev) return;
+        if (instrument === 'Acoustic Guitar') {
+            renderGuitar(ev, false);
+        } else if (instrument === 'Electric Guitar') {
+            renderGuitar(ev, true);
+        } else if (instrument === 'Piano') {
+            renderPiano(ev, false);
+        } else if (instrument === 'Casio (Electric Piano)') {
+            renderPiano(ev, true);
+        } else if (instrument === 'Violin') {
+            renderViolin(ev);
+        }
+    }
+
+    /* ═══════════════════════════════════════
+       RHYTHM BAR
+       ═══════════════════════════════════════ */
+    function renderRhythmBar() {
+        var row = document.getElementById('rhythmRow');
+        var slice = events.slice(0, 32);
+        row.textContent = slice.map(function(e) { return e.rhythm || '-'; }).join('  ');
+    }
+
+    /* ═══════════════════════════════════════
+       INIT
+       ═══════════════════════════════════════ */
+    function init() {
+        drawWaveform();
+        buildNoteMarkers();
+        updateTimeDisplay();
+        renderRhythmBar();
+
+        // Render first event
+        if (events.length > 0) {
+            setActiveEvent(0);
+        }
+    }
+
+    // Handle resize
+    var resizeTimer;
+    window.addEventListener('resize', function() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function() {
+            drawWaveform();
+            buildNoteMarkers();
+        }, 150);
+    });
+
+    init();
+})();
+</script>
 {% endblock %}
